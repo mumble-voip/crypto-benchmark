@@ -1,0 +1,21 @@
+dist: bionic
+language: c
+
+arch:
+  - amd64
+  - arm64
+
+compiler:
+  - gcc
+  - clang
+
+os:
+  - linux
+
+install:
+  - sudo apt-get install libssl-dev
+
+script:
+  - mkdir build && cd build
+  - cmake .. && make -j $(nproc)
+  - ./crypto_benchmark
