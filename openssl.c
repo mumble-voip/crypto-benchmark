@@ -18,21 +18,21 @@ bool openssl_main(const size_t message_size, const size_t iterations) {
 		return false;
 	}
 
-	printf("AES-256-GCM took %f seconds for %zu iterations\n", elapsed, iterations);
+	printf("AES-256-GCM took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
 
 	if (!(elapsed = openssl_aead(EVP_aes_256_ocb(), iterations, out, sizeof(message), message))) {
 		printf("openssl_main(): openssl_aead() failed!\n");
 		return false;
 	}
 
-	printf("AES-256-OCB took %f seconds for %zu iterations\n", elapsed, iterations);
+	printf("AES-256-OCB took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
 
 	if (!(elapsed = openssl_aead(EVP_chacha20_poly1305(), iterations, out, sizeof(message), message))) {
 		printf("openssl_main(): openssl_aead() failed!\n");
 		return false;
 	}
 
-	printf("ChaCha20-Poly1305 took %f seconds for %zu iterations\n", elapsed, iterations);
+	printf("ChaCha20-Poly1305 took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
 
 	return true;
 }
