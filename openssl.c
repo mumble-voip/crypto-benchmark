@@ -37,8 +37,8 @@ bool openssl_main(const size_t message_size, const size_t iterations) {
 	return true;
 }
 
-int openssl_process(EVP_CIPHER_CTX *ctx, const bool enc, const unsigned char *key, const unsigned char *iv, const int tag_size, unsigned char *tag, unsigned char *dst, const int src_size, const unsigned char *src) {
-	if (!EVP_CipherInit(ctx, NULL, key, iv, enc)) {
+int openssl_process(EVP_CIPHER_CTX *ctx, const bool enc, const unsigned char *iv, const int tag_size, unsigned char *tag, unsigned char *dst, const int src_size, const unsigned char *src) {
+	if (!EVP_CipherInit(ctx, NULL, NULL, iv, -1)) {
 		printf("openssl_process(): EVP_CipherInit() failed with error: %s\n", openssl_error());
 		return 0;
 	}
@@ -71,32 +71,37 @@ int openssl_process(EVP_CIPHER_CTX *ctx, const bool enc, const unsigned char *ke
 }
 
 double openssl_aead(const EVP_CIPHER *cipher, const size_t iterations, unsigned char *dst, const int size, const unsigned char *src) {
-	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	EVP_CIPHER_CTX *encrypt_ctx = EVP_CIPHER_CTX_new();
+	EVP_CIPHER_CTX *decrypt_ctx = EVP_CIPHER_CTX_new();
 
-	if (!EVP_CipherInit(ctx, cipher, NULL, NULL, -1)) {
-		printf("openssl_aead(): EVP_CipherInit() failed with error: %s\n", openssl_error());
-		EVP_CIPHER_CTX_free(ctx);
-		return 0;
-	}
-
-	unsigned char key[EVP_CIPHER_CTX_key_length(ctx)];
-	unsigned char iv[EVP_CIPHER_CTX_iv_length(ctx)];
+	unsigned char key[EVP_CIPHER_key_length(cipher)];
+	unsigned char iv[EVP_CIPHER_iv_length(cipher)];
 	unsigned char tag[16]; // EVP_CIPHER_CTX_tag_length() not in OpenSSL 1.1.1
 
-	EVP_CIPHER_CTX_rand_key(ctx, key);
-
+	RAND_bytes(key, sizeof(key));
 	RAND_bytes(iv, sizeof(iv));
 
 	double elapsed = 0;
+
+	if (!EVP_CipherInit(encrypt_ctx, cipher, key, NULL, 1)) {
+		printf("openssl_aead(): [encrypt] EVP_CipherInit() failed with error: %s\n", openssl_error());
+		goto FINAL;
+	}
+
+	if (!EVP_CipherInit(decrypt_ctx, cipher, key, NULL, 0)) {
+		printf("openssl_aead(): [decrypt] EVP_CipherInit() failed with error: %s\n", openssl_error());
+		goto FINAL;
+	}
+
 	const double start = seconds();
 
 	for (size_t i = 0; i < iterations; ++i) {
-		if (!openssl_process(ctx, 1, key, iv, sizeof(tag), tag, dst, size, src)) {
+		if (!openssl_process(encrypt_ctx, 1, iv, sizeof(tag), tag, dst, size, src)) {
 			printf("openssl_aead(): [encrypt] openssl_process() returned 0!\n");
 			goto FINAL;
 		}
 
-		if (!openssl_process(ctx, 0, key, iv, sizeof(tag), tag, dst, size, dst)) {
+		if (!openssl_process(decrypt_ctx, 0, iv, sizeof(tag), tag, dst, size, dst)) {
 			printf("openssl_aead(): [decrypt] openssl_process() returned 0!\n");
 			goto FINAL;
 		}
@@ -107,6 +112,7 @@ double openssl_aead(const EVP_CIPHER *cipher, const size_t iterations, unsigned 
 	validate(size, dst, src);
 
 FINAL:
-	EVP_CIPHER_CTX_free(ctx);
+	EVP_CIPHER_CTX_free(encrypt_ctx);
+	EVP_CIPHER_CTX_free(decrypt_ctx);
 	return elapsed;
 }
