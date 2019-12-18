@@ -18,21 +18,21 @@ bool openssl_main(const size_t message_size, const size_t iterations) {
 		return false;
 	}
 
-	printf("AES-256-GCM took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
+	printf("[OpenSSL] AES-256-GCM took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
 
 	if (!(elapsed = openssl_aead(EVP_aes_256_ocb(), iterations, out, sizeof(message), message))) {
 		printf("openssl_main(): openssl_aead() failed!\n");
 		return false;
 	}
 
-	printf("AES-256-OCB took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
+	printf("[OpenSSL] AES-256-OCB took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
 
 	if (!(elapsed = openssl_aead(EVP_chacha20_poly1305(), iterations, out, sizeof(message), message))) {
 		printf("openssl_main(): openssl_aead() failed!\n");
 		return false;
 	}
 
-	printf("ChaCha20-Poly1305 took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
+	printf("[OpenSSL] ChaCha20-Poly1305 took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
 
 	return true;
 }
@@ -40,7 +40,7 @@ bool openssl_main(const size_t message_size, const size_t iterations) {
 int openssl_process(EVP_CIPHER_CTX *ctx, const bool enc, const unsigned char *key, const unsigned char *iv, const int tag_size, unsigned char *tag, unsigned char *dst, const int src_size, const unsigned char *src) {
 	if (!EVP_CipherInit(ctx, NULL, key, iv, enc)) {
 		printf("openssl_process(): EVP_CipherInit() failed with error: %s\n", openssl_error());
-		return 0L;
+		return 0;
 	}
 
 	if (!enc && !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, tag_size, tag)) {

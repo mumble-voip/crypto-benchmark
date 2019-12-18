@@ -7,12 +7,28 @@ find_package(OpenSSL
 	REQUIRED
 )
 
+find_package(PkgConfig
+	REQUIRED
+)
+
+pkg_search_module(libsodium
+	REQUIRED
+	libsodium
+)
+
 add_executable(crypto_benchmark
 	"main.c"
 	"openssl.c"
 	"openssl.h"
+	"sodium.c"
+	"sodium.h"
 	"utils.c"
 	"utils.h"
 )
 
-target_link_libraries(crypto_benchmark OpenSSL::Crypto)
+target_include_directories(crypto_benchmark PRIVATE ${libsodium_INCLUDE_DIRS})
+
+target_link_libraries(crypto_benchmark
+	OpenSSL::Crypto
+	${libsodium_LIBRARIES}
+)
