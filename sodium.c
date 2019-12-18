@@ -4,17 +4,26 @@
 #include <sodium.h>
 
 bool sodium_main(const size_t message_size, const size_t iterations) {
+	if (sodium_init() == -1) {
+		printf("sodium_main(): sodium_init() failed!\n");
+		return false;
+	}
+
 	unsigned char message[message_size], out[message_size];
 	randombytes_buf(message, sizeof(message));
 
 	double elapsed;
 
-	if (!(elapsed = sodium_aes_256_gcm(iterations, out, sizeof(message), message))) {
-		printf("sodium_main(): sodium_aes_256_gcm() failed!\n");
-		return false;
-	}
+	if (crypto_aead_aes256gcm_is_available()) {
+		if (!(elapsed = sodium_aes_256_gcm(iterations, out, sizeof(message), message))) {
+			printf("sodium_main(): sodium_aes_256_gcm() failed!\n");
+			return false;
+		}
 
-	printf("[libsodium] AES-256-GCM took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
+		printf("[libsodium] AES-256-GCM took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
+	} else {
+		printf("[libsodium] skipping AES-256-GCM benchmark due to missing requirements. SSSE3 extensions, \"aesni\" and \"pclmul\" instructions are required.\n");
+	}
 
 	if (!(elapsed = sodium_chacha20_poly1305(iterations, out, sizeof(message), message))) {
 		printf("sodium_main(): sodium_chacha20_poly1305() failed!\n");
