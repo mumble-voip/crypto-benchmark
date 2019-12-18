@@ -16,6 +16,7 @@ install:
   - sudo apt-get install libsodium-dev libssl-dev
 
 script:
+  - cat /proc/cpuinfo
   - mkdir build && cd build
   - cmake .. && make -j $(nproc)
   - ./crypto_benchmark
