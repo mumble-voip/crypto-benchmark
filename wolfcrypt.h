@@ -2,7 +2,9 @@
 
 #include <stdbool.h>
 
-#include <wolfssl/options.h>
+#ifdef HAS_WOLFSSL_OPTIONS
+# include <wolfssl/options.h>
+#endif
 
 #include <wolfssl/wolfcrypt/types.h>
 

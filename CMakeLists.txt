@@ -1,6 +1,8 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.1)
 
 project(crypto_benchmark)
+
+include(CheckIncludeFile)
 
 find_package(OpenSSL
 	COMPONENTS Crypto
@@ -32,6 +34,17 @@ add_executable(crypto_benchmark
 	"wolfcrypt.c"
 	"wolfcrypt.h"
 )
+
+# The official Debian package provides the file, but the official Ubuntu one doesn't.
+check_include_file(
+	"wolfssl/options.h"
+	HAS_WOLFSSL_OPTIONS
+	CMAKE_REQUIRED_INCLUDES wolfssl_INCLUDE_DIRS
+)
+
+if(HAS_WOLFSSL_OPTIONS)
+	target_compile_definitions(crypto_benchmark PRIVATE "HAS_WOLFSSL_OPTIONS")
+endif()
 
 target_include_directories(crypto_benchmark PRIVATE
 	${libsodium_INCLUDE_DIRS}
