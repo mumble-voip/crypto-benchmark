@@ -35,15 +35,17 @@ add_executable(crypto_benchmark
 	"wolfcrypt.h"
 )
 
-# The official Debian package provides the file, but the official Ubuntu one doesn't.
+target_compile_definitions(crypto_benchmark PRIVATE "HAS_WOLFSSL_OPTIONS")
+
+# The official Ubuntu Bionic package doesn't provide the header.
 check_include_file(
 	"wolfssl/options.h"
 	HAS_WOLFSSL_OPTIONS
 	CMAKE_REQUIRED_INCLUDES wolfssl_INCLUDE_DIRS
 )
 
-if(HAS_WOLFSSL_OPTIONS)
-	target_compile_definitions(crypto_benchmark PRIVATE "HAS_WOLFSSL_OPTIONS")
+if(NOT HAS_WOLFSSL_OPTIONS)
+	target_include_directories(crypto_benchmark PRIVATE "${CMAKE_SOURCE_DIR}/include")
 endif()
 
 target_include_directories(crypto_benchmark PRIVATE
