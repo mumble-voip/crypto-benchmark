@@ -3,6 +3,7 @@
 
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/chacha20_poly1305.h>
+#include <wolfssl/wolfcrypt/random.h>
 
 bool wolfcrypt_main(const size_t message_size, const size_t iterations) 	{
 	unsigned char message[message_size], out[message_size];
@@ -56,9 +57,9 @@ bool wolfcrypt_random(WC_RNG *rng, const size_t size, byte *out) {
 }
 
 double wolfcrypt_aes_256_gcm(const size_t iterations, WC_RNG *rng, byte *dst, const word32 size, const byte *src) {
-	byte key[AES_256_KEY_SIZE];
-	byte iv[GCM_NONCE_MID_SZ];
-	byte tag[AES_BLOCK_SIZE];
+	byte key[32];
+	byte iv[12];
+	byte tag[16];
 
 	if (!wolfcrypt_random(rng, sizeof(key), key)) {
 		printf("wolfcrypt_aes_256_gcm(): wolfcrypt_random() failed to generate the key!\n");
