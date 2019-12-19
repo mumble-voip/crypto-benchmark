@@ -3,6 +3,7 @@
 
 #include "openssl.h"
 #include "sodium.h"
+#include "wolfcrypt.h"
 
 #include <stdlib.h>
 
@@ -12,6 +13,10 @@ int main() {
 	}
 
 	if (!sodium_main(MESSAGE_SIZE, ITERATIONS)) {
+		return EXIT_FAILURE;
+	}
+
+	if (!wolfcrypt_main(MESSAGE_SIZE, ITERATIONS)) {
 		return EXIT_FAILURE;
 	}
 

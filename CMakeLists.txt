@@ -16,6 +16,11 @@ pkg_search_module(libsodium
 	libsodium
 )
 
+pkg_search_module(wolfssl
+	REQUIRED
+	wolfssl
+)
+
 add_executable(crypto_benchmark
 	"main.c"
 	"openssl.c"
@@ -24,11 +29,17 @@ add_executable(crypto_benchmark
 	"sodium.h"
 	"utils.c"
 	"utils.h"
+	"wolfcrypt.c"
+	"wolfcrypt.h"
 )
 
-target_include_directories(crypto_benchmark PRIVATE ${libsodium_INCLUDE_DIRS})
+target_include_directories(crypto_benchmark PRIVATE
+	${libsodium_INCLUDE_DIRS}
+	${wolfssl_INCLUDE_DIRS}
+)
 
 target_link_libraries(crypto_benchmark
 	OpenSSL::Crypto
 	${libsodium_LIBRARIES}
+	${wolfssl_LIBRARIES}
 )
