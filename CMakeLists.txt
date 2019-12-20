@@ -13,6 +13,11 @@ find_package(PkgConfig
 	REQUIRED
 )
 
+pkg_search_module(nss
+	REQUIRED
+	nss
+)
+
 pkg_search_module(libsodium
 	REQUIRED
 	libsodium
@@ -25,6 +30,8 @@ pkg_search_module(wolfssl
 
 add_executable(crypto_benchmark
 	"main.c"
+	"nss.c"
+	"nss.h"
 	"openssl.c"
 	"openssl.h"
 	"sodium.c"
@@ -49,12 +56,14 @@ if(NOT HAS_WOLFSSL_OPTIONS)
 endif()
 
 target_include_directories(crypto_benchmark PRIVATE
+	${nss_INCLUDE_DIRS}
 	${libsodium_INCLUDE_DIRS}
 	${wolfssl_INCLUDE_DIRS}
 )
 
 target_link_libraries(crypto_benchmark
 	OpenSSL::Crypto
+	${nss_LIBRARIES}
 	${libsodium_LIBRARIES}
 	${wolfssl_LIBRARIES}
 )
