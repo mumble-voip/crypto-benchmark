@@ -13,7 +13,7 @@ os:
   - linux
 
 install:
-  - sudo apt-get install libsodium-dev libssl-dev libwolfssl-dev
+  - sudo apt-get install libnss3-dev libsodium-dev libssl-dev libwolfssl-dev
 
 script:
   - cat /proc/cpuinfo
