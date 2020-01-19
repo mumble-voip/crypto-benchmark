@@ -28,16 +28,21 @@ pkg_search_module(wolfssl
 	wolfssl
 )
 
+add_subdirectory(libhydrogen)
+
 add_executable(crypto_benchmark
 	"main.c"
+	"utils.c"
+	"utils.h"
+
+	"hydrogen.c"
+	"hydrogen.h"
 	"nss.c"
 	"nss.h"
 	"openssl.c"
 	"openssl.h"
 	"sodium.c"
 	"sodium.h"
-	"utils.c"
-	"utils.h"
 	"wolfcrypt.c"
 	"wolfcrypt.h"
 )
@@ -62,6 +67,7 @@ target_include_directories(crypto_benchmark PRIVATE
 )
 
 target_link_libraries(crypto_benchmark
+	hydrogen::hydrogen
 	OpenSSL::Crypto
 	${nss_LIBRARIES}
 	${libsodium_LIBRARIES}
