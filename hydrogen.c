@@ -8,6 +8,11 @@
 #define CONTEXT "benchmark"
 
 bool hydrogen_main(const size_t message_size, const size_t iterations) {
+	if (hydro_init() != 0) {
+		printf("hydrogen_main(): hydro_init() failed!\n");
+		return false;
+	}
+
 	uint8_t message[message_size], out[message_size + hydro_secretbox_HEADERBYTES];
 	hydro_random_buf(message, sizeof(message));
 
