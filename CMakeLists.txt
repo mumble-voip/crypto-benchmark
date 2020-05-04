@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.1)
 
 project(crypto_benchmark)
 
-option(hydrogen "Build libhydrogen benchmark" ON)
+option(hydrogen "Build libhydrogen benchmark" OFF)
 option(nss "Build NSS benchmark" ON)
 option(openssl "Build OpenSSL benchmark" ON)
 option(sodium "Build libsodium benchmark" ON)
