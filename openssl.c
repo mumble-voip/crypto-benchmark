@@ -4,10 +4,6 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
-#define KEY_SIZE 32
-#define IV_SIZE 12
-#define TAG_SIZE 16
-
 #define openssl_error() (ERR_error_string(ERR_get_error(), NULL))
 
 typedef struct OpenSSLParam {
