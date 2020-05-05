@@ -71,7 +71,7 @@ double nss_aes_256_gcm(const size_t iterations, PK11SlotInfo *slot, unsigned cha
 	gcm_params.pIv = iv;
 	gcm_params.ulAADLen = 0;
 	gcm_params.ulIvLen = sizeof(iv);
-	gcm_params.ulTagBits = TAG_SIZE;
+	gcm_params.ulTagBits = TAG_SIZE * 8;
 
 	SECItem params;
 	params.data = (unsigned char *)&gcm_params;
