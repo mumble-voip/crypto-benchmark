@@ -1,164 +1,195 @@
 #include "nss.h"
-#include "utils.h"
 
 #include <nspr/prerror.h>
 
 #include <nss/nss.h>
 #include <nss/pk11pub.h>
 
-#define KEY_SIZE 32
-#define IV_SIZE 12
-#define TAG_SIZE 16
-
-bool nss_main(const size_t message_size, const size_t iterations) {
-	if (NSS_NoDB_Init(NULL) != SECSuccess) {
-		printf("nss_main(): NSS_NoDB_Init() failed with error %d\n", PR_GetError());
-		return false;
-	}
-
-	PK11SlotInfo *slot = PK11_GetInternalSlot();
-	if (!slot) {
-		printf("nss_main(): PK11_GetInternalSlot() failed with error %d\n", PR_GetError());
-		return false;
-	}
-
-	bool ok = false;
-
-	unsigned char message[message_size], out[message_size];
-	if (PK11_GenerateRandomOnSlot(slot, message, sizeof(message)) != SECSuccess) {
-		printf("nss_main(): PK11_GenerateRandomOnSlot() failed with error %d\n", PR_GetError());
-		goto FINAL;
-	}
-
-	double elapsed;
-
-	if (!(elapsed = nss_aes_256_gcm(iterations, slot, out, sizeof(message), message))) {
-		printf("nss_main(): nss_aes_256_gcm() failed!\n");
-		goto FINAL;
-	}
-
-	printf("[NSS] AES-256-GCM took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
-
-	if (!(elapsed = nss_chacha20_poly1305(iterations, slot, out, sizeof(message), message))) {
-		printf("nss_main(): nss_chacha20_poly1305() failed!\n");
-		goto FINAL;
-	}
-
-	printf("[NSS] ChaCha20-Poly1305 took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
-
-	ok = true;
-
-FINAL:
-	PK11_FreeSlot(slot);
-	return ok;
-}
-
-double nss_aes_256_gcm(const size_t iterations, PK11SlotInfo *slot, unsigned char *dst, const unsigned int size, const unsigned char *src) {
+typedef struct NSSParam {
+	PK11SymKey *key;
+	PK11SlotInfo *slot;
+	CK_MECHANISM_TYPE ckmt;
 	unsigned char iv[IV_SIZE];
-	if (PK11_GenerateRandomOnSlot(slot, iv, sizeof(iv)) != SECSuccess) {
-		printf("nss_aes_256_gcm(): PK11_GenerateRandomOnSlot() failed with error %d\n", PR_GetError());
-		return 0;
-	}
-
-	PK11SymKey *key = PK11_KeyGen(slot, CKM_AES_GCM, NULL, KEY_SIZE, NULL);
-	if (!key) {
-		printf("nss_aes_256_gcm(): PK11_KeyGen() failed with error %d\n", PR_GetError());
-		return 0;
-	}
-
+	SECItem params;
 	CK_GCM_PARAMS gcm_params;
-	gcm_params.pAAD = NULL;
-	gcm_params.pIv = iv;
-	gcm_params.ulAADLen = 0;
-	gcm_params.ulIvLen = sizeof(iv);
-	gcm_params.ulTagBits = TAG_SIZE * 8;
+	CK_NSS_AEAD_PARAMS aead_params;
+} NSSParam;
 
-	SECItem params;
-	params.data = (unsigned char *)&gcm_params;
-	params.len = sizeof(gcm_params);
-	params.type = siBuffer;
+bool nss_free(void *param);
 
-	// The tag is appended to the output buffer.
-	unsigned char tmp[size + gcm_params.ulTagBits];
-	unsigned int written;
-	double elapsed = 0;
-
-	const double start = seconds();
-
-	for (size_t i = 0; i < iterations; ++i) {
-		if (PK11_Encrypt(key, CKM_AES_GCM, &params, tmp, &written, sizeof(tmp), src, size) != SECSuccess) {
-			printf("nss_aes_256_gcm(): PK11_Encrypt() failed with error %d\n", PR_GetError());
-			goto FINAL;
-		}
-
-		if (PK11_Decrypt(key, CKM_AES_GCM, &params, tmp, &written, sizeof(tmp), tmp, written) != SECSuccess) {
-			printf("nss_aes_256_gcm(): PK11_Decrypt() failed with error %d\n", PR_GetError());
-			goto FINAL;
-		}
-	}
-
-	elapsed = seconds() - start;
-
-	memcpy(dst, tmp, size);
-
-	validate(size, dst, src);
-
-FINAL:
-	PK11_FreeSymKey(key);
-	return elapsed;
+const char *nss_name() {
+	return "NSS";
 }
 
-double nss_chacha20_poly1305(const size_t iterations, PK11SlotInfo *slot, unsigned char *dst, const unsigned int size, const unsigned char *src) {
-	unsigned char iv[IV_SIZE];
-	if (PK11_GenerateRandomOnSlot(slot, iv, sizeof(iv)) != SECSuccess) {
-		printf("nss_chacha20_poly1305(): PK11_GenerateRandomOnSlot() failed with error %d\n", PR_GetError());
+const char **nss_ciphers() {
+	static const char *names[] = {
+		CIPHER_AES_256_GCM,
+		CIPHER_CHACHA20_POLY1305,
+		NULL
+	};
+
+	return names;
+}
+
+bool nss_init(void **param) {
+	if (!param) {
+		return false;
+	}
+
+	if (NSS_NoDB_Init(NULL) != SECSuccess) {
+		printf("nss_init(): NSS_NoDB_Init() failed with error %d\n", PR_GetError());
+		return false;
+	}
+
+	NSSParam *np = zero_malloc(sizeof(NSSParam));
+
+	np->slot = PK11_GetInternalSlot();
+	if (!np->slot) {
+		printf("nss_init(): PK11_GetInternalSlot() failed with error %d\n", PR_GetError());
+		nss_free(np);
+		return false;
+	}
+
+	np->gcm_params.pAAD = NULL;
+	np->gcm_params.pIv = np->iv;
+	np->gcm_params.ulAADLen = 0;
+	np->gcm_params.ulIvLen = IV_SIZE;
+	np->gcm_params.ulTagBits = TAG_SIZE * 8;
+
+	np->aead_params.pAAD = NULL;
+	np->aead_params.pNonce = np->iv;
+	np->aead_params.ulAADLen = 0;
+	np->aead_params.ulNonceLen = IV_SIZE;
+	np->aead_params.ulTagLen = TAG_SIZE;
+
+	*param = np;
+
+	return true;
+}
+
+bool nss_free(void *param) {
+	if (!param) {
+		return false;
+	}
+
+	NSSParam *np = param;
+
+	if (np->slot) {
+		PK11_FreeSlot(np->slot);
+	}
+
+	if (np->key) {
+		PK11_FreeSymKey(np->key);
+	}
+
+	free(np);
+
+	return true;
+}
+
+bool nss_random(void *param, const size_t size, void *dst) {
+	if (!param || !dst) {
+		return false;
+	}
+
+	if (PK11_GenerateRandomOnSlot(((NSSParam *)param)->slot, dst, size) != SECSuccess) {
+		printf("nss_random(): PK11_GenerateRandomOnSlot() failed with error %d\n", PR_GetError());
+		return false;
+	}
+
+	return true;
+}
+
+bool nss_set_cipher(void *param, const char *cipher) {
+	if (!param || !cipher) {
+		return false;
+	}
+
+	NSSParam *np = param;
+
+	if (cipher == CIPHER_AES_256_GCM) {
+		np->ckmt = CKM_AES_GCM;
+		np->params.len = sizeof(np->gcm_params);
+		np->params.data = (unsigned char *)&np->gcm_params;
+	} else if (cipher == CIPHER_CHACHA20_POLY1305) {
+		np->ckmt = CKM_NSS_CHACHA20_POLY1305;
+		np->params.len = sizeof(np->aead_params);
+		np->params.data = (unsigned char *)&np->aead_params;
+	} else {
+		printf("nss_set_cipher(): \"%s\" is not a recognized cipher!\n", cipher);
+		return false;
+	}
+
+	np->params.type = siBuffer;
+
+	if (np->key) {
+		PK11_FreeSymKey(np->key);
+	}
+
+	np->key = PK11_KeyGen(np->slot, np->ckmt, NULL, KEY_SIZE, NULL);
+	if (!np->key) {
+		printf("nss_set_cipher(): PK11_KeyGen() failed with error %d\n", PR_GetError());
+		return false;
+	}
+
+	if (!nss_random(np, sizeof(np->iv), np->iv)) {
+		printf("nss_set_cipher(): nss_random() failed!\n");
+		return false;
+	}
+
+	return true;
+}
+
+size_t nss_buffer_size(const size_t size) {
+	return size + TAG_SIZE;
+}
+
+size_t nss_encrypt(void *param, const size_t size, void *dst, const void *src) {
+	if (!param || !dst || !src) {
 		return 0;
 	}
 
-	PK11SymKey *key = PK11_KeyGen(slot, CKM_NSS_CHACHA20_POLY1305, NULL, KEY_SIZE, NULL);
-	if (!key) {
-		printf("nss_chacha20_poly1305(): PK11_KeyGen() failed with error %d\n", PR_GetError());
-		return 0;
-	}
+	NSSParam *np = param;
 
-	CK_NSS_AEAD_PARAMS aead_params;
-	aead_params.pAAD = NULL;
-	aead_params.pNonce = iv;
-	aead_params.ulAADLen = 0;
-	aead_params.ulNonceLen = sizeof(iv);
-	aead_params.ulTagLen = TAG_SIZE;
-
-	SECItem params;
-	params.data = (unsigned char *)&aead_params;
-	params.len = sizeof(aead_params);
-	params.type = siBuffer;
-
-	// The tag is appended to the output buffer.
-	unsigned char tmp[size + aead_params.ulTagLen];
 	unsigned int written;
-	double elapsed = 0;
 
-	const double start = seconds();
-
-	for (size_t i = 0; i < iterations; ++i) {
-		if (PK11_Encrypt(key, CKM_NSS_CHACHA20_POLY1305, &params, tmp, &written, sizeof(tmp), src, size) != SECSuccess) {
-			printf("nss_chacha20_poly1305(): PK11_Encrypt() failed with error %d\n", PR_GetError());
-			goto FINAL;
-		}
-
-		if (PK11_Decrypt(key, CKM_NSS_CHACHA20_POLY1305, &params, tmp, &written, sizeof(tmp), tmp, written) != SECSuccess) {
-			printf("nss_chacha20_poly1305(): PK11_Decrypt() failed with error %d\n", PR_GetError());
-			goto FINAL;
-		}
+	if (PK11_Encrypt(np->key, np->ckmt, &np->params, dst, &written, nss_buffer_size(size), src, size) != SECSuccess) {
+		printf("nss_encrypt(): PK11_Encrypt() failed with error %d\n", PR_GetError());
+		return 0;
 	}
 
-	elapsed = seconds() - start;
+	return written;
+}
 
-	memcpy(dst, tmp, size);
+size_t nss_decrypt(void *param, const size_t size, void *dst, const void *src) {
+	if (!param || !dst || !src) {
+		return 0;
+	}
 
-	validate(size, dst, src);
+	NSSParam *np = param;
 
-FINAL:
-	PK11_FreeSymKey(key);
-	return elapsed;
+	unsigned int written;
+
+	if (PK11_Decrypt(np->key, np->ckmt, &np->params, dst, &written, size, src, size) != SECSuccess) {
+		printf("nss_decrypt(): PK11_Decrypt() failed with error %d\n", PR_GetError());
+		return 0;
+	}
+
+	return written;
+}
+
+const Crypto *nss_get() {
+	static const Crypto crypto = {
+		nss_name,
+		nss_ciphers,
+		nss_init,
+		nss_free,
+		nss_random,
+		nss_set_cipher,
+		nss_buffer_size,
+		nss_encrypt,
+		nss_decrypt
+	};
+
+	return &crypto;
 }

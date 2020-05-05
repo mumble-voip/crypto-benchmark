@@ -1,97 +1,157 @@
 #include "sodium.h"
-#include "utils.h"
 
 #include <sodium.h>
 
-bool sodium_main(const size_t message_size, const size_t iterations) {
+typedef struct SodiumParam {
+	unsigned char key[KEY_SIZE];
+	unsigned char iv[IV_SIZE];
+	unsigned char tag[TAG_SIZE];
+	const char *current_cipher;
+	crypto_aead_aes256gcm_state ctx;
+} SodiumParam;
+
+const char *sodium_name() {
+	return "libsodium";
+}
+
+const char **sodium_ciphers() {
+	static const char *names[] = {
+		CIPHER_AES_256_GCM,
+		CIPHER_CHACHA20_POLY1305,
+		NULL
+	};
+
+	return names;
+}
+
+bool sodium_init_(void **param) {
+	if (!param) {
+		return false;
+	}
+
 	if (sodium_init() == -1) {
-		printf("sodium_main(): sodium_init() failed!\n");
+		printf("sodium_init_(): sodium_init() failed!\n");
 		return false;
 	}
 
-	unsigned char message[message_size], out[message_size];
-	randombytes_buf(message, sizeof(message));
-
-	double elapsed;
-
-	if (crypto_aead_aes256gcm_is_available()) {
-		if (!(elapsed = sodium_aes_256_gcm(iterations, out, sizeof(message), message))) {
-			printf("sodium_main(): sodium_aes_256_gcm() failed!\n");
-			return false;
-		}
-
-		printf("[libsodium] AES-256-GCM took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
-	} else {
-		printf("[libsodium] skipping AES-256-GCM benchmark due to missing requirements. SSSE3 extensions, \"aesni\" and \"pclmul\" instructions are required.\n");
-	}
-
-	if (!(elapsed = sodium_chacha20_poly1305(iterations, out, sizeof(message), message))) {
-		printf("sodium_main(): sodium_chacha20_poly1305() failed!\n");
-		return false;
-	}
-
-	printf("[libsodium] ChaCha20-Poly1305 took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
+	*param = malloc(sizeof(SodiumParam));
 
 	return true;
 }
 
-double sodium_aes_256_gcm(const size_t iterations, unsigned char *dst, const unsigned long long size, const unsigned char *src) {
-	unsigned char key[crypto_aead_aes256gcm_KEYBYTES];
-	unsigned char iv[crypto_aead_aes256gcm_NPUBBYTES];
-	unsigned char tag[crypto_aead_aes256gcm_ABYTES];
-
-	crypto_aead_aes256gcm_keygen(key);
-	randombytes_buf(iv, sizeof(iv));
-
-	crypto_aead_aes256gcm_state ctx;
-	crypto_aead_aes256gcm_beforenm(&ctx, key);
-
-	const double start = seconds();
-
-	for (size_t i = 0; i < iterations; ++i) {
-		if (crypto_aead_aes256gcm_encrypt_detached_afternm(dst, tag, NULL, src, size, NULL, 0, NULL, iv, &ctx) != 0) {
-			printf("sodium_aes_256_gcm(): crypto_aead_aes256gcm_encrypt_detached_afternm() failed!\n");
-			return 0;
-		}
-
-		if (crypto_aead_aes256gcm_decrypt_detached_afternm(dst, NULL, dst, size, tag, NULL, 0, iv, &ctx) != 0) {
-			printf("sodium_aes_256_gcm(): crypto_aead_chacha20poly1305_ietf_decrypt_detached() failed!\n");
-			return 0;
-		}
+bool sodium_free_(void *param) {
+	if (!param) {
+		return false;
 	}
 
-	const double elapsed = seconds() - start;
+	free(param);
 
-	validate(size, dst, src);
-
-	return elapsed;
+	return true;
 }
 
-double sodium_chacha20_poly1305(const size_t iterations, unsigned char *dst, const unsigned long long size, const unsigned char *src) {
-	unsigned char key[crypto_aead_chacha20poly1305_ietf_KEYBYTES];
-	unsigned char iv[crypto_aead_chacha20poly1305_ietf_NPUBBYTES];
-	unsigned char tag[crypto_aead_chacha20poly1305_ietf_ABYTES];
-
-	crypto_aead_chacha20poly1305_ietf_keygen(key);
-	randombytes_buf(iv, sizeof(iv));
-
-	const double start = seconds();
-
-	for (size_t i = 0; i < iterations; ++i) {
-		if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(dst, tag, NULL, src, size, NULL, 0, NULL, iv, key) != 0) {
-			printf("sodium_chacha20_poly1305(): crypto_aead_chacha20poly1305_ietf_encrypt_detached() failed!\n");
-			return 0;
-		}
-
-		if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(dst, NULL, dst, size, tag, NULL, 0, iv, key) != 0) {
-			printf("sodium_chacha20_poly1305(): crypto_aead_chacha20poly1305_ietf_decrypt_detached() failed!\n");
-			return 0;
-		}
+bool sodium_random(void *param, const size_t size, void *dst) {
+	if (!param || !dst) {
+		return false;
 	}
 
-	const double elapsed = seconds() - start;
+	randombytes_buf(dst, size);
 
-	validate(size, dst, src);
+	return true;
+}
 
-	return elapsed;
+bool sodium_set_cipher(void *param, const char *cipher) {
+	if (!param || !cipher) {
+		return false;
+	}
+
+	SodiumParam *sp = param;
+
+	if (cipher == CIPHER_AES_256_GCM) {
+		if (!crypto_aead_aes256gcm_is_available()) {
+			printf("sodium_set_cipher(): AES-256-GCM requires SSSE3 extensions + \"aesni\" and \"pclmul\" instructions.\n");
+			return false;
+		}
+
+		sp->current_cipher = CIPHER_AES_256_GCM;
+		crypto_aead_aes256gcm_keygen(sp->key);
+		crypto_aead_aes256gcm_beforenm(&sp->ctx, sp->key);
+	} else if (cipher == CIPHER_CHACHA20_POLY1305) {
+		sp->current_cipher = CIPHER_CHACHA20_POLY1305;
+		crypto_aead_chacha20poly1305_ietf_keygen(sp->key);
+	} else {
+		printf("sodium_set_cipher(): \"%s\" is not a recognized cipher!\n", cipher);
+		return false;
+	}
+
+	sodium_random(param, sizeof(sp->iv), sp->iv);
+
+	return true;
+}
+
+size_t sodium_buffer_size(const size_t size) {
+	return size;
+}
+
+size_t sodium_encrypt(void *param, const size_t size, void *dst, const void *src) {
+	if (!param || !dst || !src) {
+		return 0;
+	}
+
+	SodiumParam *sp = param;
+
+	if (sp->current_cipher == CIPHER_AES_256_GCM) {
+		if (crypto_aead_aes256gcm_encrypt_detached_afternm(dst, sp->tag, NULL, src, size, NULL, 0, NULL, sp->iv, &sp->ctx) != 0) {
+			printf("sodium_encrypt(): crypto_aead_aes256gcm_encrypt_detached_afternm() failed!\n");
+			return 0;
+		}
+	} else if (sp->current_cipher == CIPHER_CHACHA20_POLY1305) {
+		if (crypto_aead_chacha20poly1305_ietf_encrypt_detached(dst, sp->tag, NULL, src, size, NULL, 0, NULL, sp->iv, sp->key) != 0) {
+			printf("sodium_encrypt(): crypto_aead_chacha20poly1305_ietf_encrypt_detached() failed!\n");
+			return 0;
+		}
+	} else {
+		return 0;
+	}
+
+	return size;
+}
+
+size_t sodium_decrypt(void *param, const size_t size, void *dst, const void *src) {
+	if (!param || !dst || !src) {
+		return 0;
+	}
+
+	SodiumParam *sp = param;
+
+	if (sp->current_cipher == CIPHER_AES_256_GCM) {
+		if (crypto_aead_aes256gcm_decrypt_detached_afternm(dst, NULL, dst, size, sp->tag, NULL, 0, sp->iv, &sp->ctx) != 0) {
+			printf("sodium_decrypt(): crypto_aead_aes256gcm_decrypt_detached_afternm() failed!\n");
+			return 0;
+		}
+	} else if (sp->current_cipher == CIPHER_CHACHA20_POLY1305) {
+		if (crypto_aead_chacha20poly1305_ietf_decrypt_detached(dst, NULL, dst, size, sp->tag, NULL, 0, sp->iv, sp->key) != 0) {
+			printf("sodium_decrypt(): crypto_aead_chacha20poly1305_ietf_decrypt_detached() failed!\n");
+			return 0;
+		}
+	} else {
+		return 0;
+	}
+
+	return size;
+}
+
+const Crypto *sodium_get() {
+	static const Crypto crypto = {
+		sodium_name,
+		sodium_ciphers,
+		sodium_init_,
+		sodium_free_,
+		sodium_random,
+		sodium_set_cipher,
+		sodium_buffer_size,
+		sodium_encrypt,
+		sodium_decrypt
+	};
+
+	return &crypto;
 }

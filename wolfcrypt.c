@@ -1,175 +1,70 @@
 #include "wolfcrypt.h"
-#include "utils.h"
+
+#ifdef HAS_WOLFSSL_OPTIONS
+# include <wolfssl/options.h>
+#endif
 
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/chacha20_poly1305.h>
+
 #include <wolfssl/wolfcrypt/random.h>
 
-bool wolfcrypt_main(const size_t message_size, const size_t iterations) 	{
-	unsigned char message[message_size], out[message_size];
-	bool ok = false;
-	double elapsed;
-
+typedef struct WolfCryptParam {
+	byte key[KEY_SIZE];
+	byte iv[IV_SIZE];
+	byte tag[TAG_SIZE];
 	WC_RNG rng;
-	if (!wolfcrypt_init(&rng)) {
-		printf("wolfcrypt_main(): wolfcrypt_init() failed!\n");
-		goto FINAL;
-	}
+	Aes aes;
+	const char *current_cipher;
+} WolfCryptParam;
 
-	if (!wolfcrypt_random(&rng, sizeof(message), message)) {
-		printf("wolfcrypt_main(): wolfcrypt_random() failed!\n");
-		goto FINAL;
-	}
+const char *wolfcrypt_name() {
+	return "wolfCrypt";
+}
 
-	if (!(elapsed = wolfcrypt_aes_256_gcm(iterations, &rng, out, sizeof(message), message))) {
-		printf("wolfcrypt_main(): wolfcrypt_aes_256_gcm() failed!\n");
-		goto FINAL;
-	}
+const char **wolfcrypt_ciphers() {
+	static const char *names[] = {
+		CIPHER_AES_256_GCM,
+		CIPHER_CHACHA20_POLY1305,
+		NULL
+	};
 
-	printf("[wolfCrypt] AES-256-GCM took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
+	return names;
+}
 
-	if (!(elapsed = wolfcrypt_chacha20_poly1305(iterations, &rng, out, sizeof(message), message))) {
-		printf("wolfcrypt_main(): wolfcrypt_chacha20_poly1305() failed!\n");
-		goto FINAL;
-	}
-
-	printf("[wolfCrypt] ChaCha20-Poly1305 took %f seconds for %zu iterations, %zu bytes message\n", elapsed, iterations, message_size);
-
-	ok = true;
-
-FINAL:
-	if (!wolfcrypt_cleanup(&rng)) {
-		printf("wolfcrypt_main(): wolfcrypt_cleanup() failed!\n");
+bool wolfcrypt_init(void **param) {
+	if (!param) {
 		return false;
 	}
 
-	return ok;
-}
-
-bool wolfcrypt_random(WC_RNG *rng, const size_t size, byte *out) { 
-	const int ret = wc_RNG_GenerateBlock(rng, out, size);
-	if (ret != 0) {
-		printf("wolfcrypt_random(): wc_RNG_GenerateBlock() failed with error %d\n", ret);
-		return false;
-	}
-
-	return true;
-}
-
-double wolfcrypt_aes_256_gcm(const size_t iterations, WC_RNG *rng, byte *dst, const word32 size, const byte *src) {
-	byte key[32];
-	byte iv[12];
-	byte tag[16];
-
-	if (!wolfcrypt_random(rng, sizeof(key), key)) {
-		printf("wolfcrypt_aes_256_gcm(): wolfcrypt_random() failed to generate the key!\n");
-		return 0;
-	}
-
-	if (!wolfcrypt_random(rng, sizeof(iv), iv)) {
-		printf("wolfcrypt_aes_256_gcm(): wolfcrypt_random() failed to generate the IV!\n");
-		return 0;
-	}
-
-	int ret;
-
-	Aes encrypt_aes;
-	ret = wc_AesGcmSetKey(&encrypt_aes, key, sizeof(key));
-	if (ret != 0) {
-		printf("wolfcrypt_aes_256_gcm(): [encrypt] wc_AesGcmSetKey() failed with error %d\n", ret);
-		return 0;
-	}
-
-	Aes decrypt_aes;
-	ret = wc_AesGcmSetKey(&decrypt_aes, key, sizeof(key));
-	if (ret != 0) {
-		printf("wolfcrypt_aes_256_gcm(): [decrypt] wc_AesGcmSetKey() failed with error %d\n", ret);
-		return 0;
-	}
-
-	const double start = seconds();
-
-	for (size_t i = 0; i < iterations; ++i) {
-		ret = wc_AesGcmEncrypt(&encrypt_aes, dst, src, size, iv, sizeof(iv), tag, sizeof(tag), NULL, 0);
-		if (ret != 0) {
-			printf("wolfcrypt_aes_256_gcm(): wc_AesGcmEncrypt() failed with error %d\n", ret);
-			return 0;
-		}
-
-		ret = wc_AesGcmDecrypt(&decrypt_aes, dst, dst, size, iv, sizeof(iv), tag, sizeof(tag), NULL, 0);
-		if (ret != 0) {
-			printf("wolfcrypt_aes_256_gcm(): wc_AesGcmDecrypt() failed with error %d\n", ret);
-			return 0;
-		}
-	}
-
-	const double elapsed = seconds() - start;
-
-	validate(size, dst, src);
-
-	return elapsed;
-}
-
-double wolfcrypt_chacha20_poly1305(const size_t iterations, WC_RNG *rng, byte *dst, const word32 size, const byte *src) {
-	byte key[CHACHA20_POLY1305_AEAD_KEYSIZE];
-	byte iv[CHACHA20_POLY1305_AEAD_IV_SIZE];
-	byte tag[CHACHA20_POLY1305_AEAD_AUTHTAG_SIZE];
-
-	if (!wolfcrypt_random(rng, sizeof(key), key)) {
-		printf("wolfcrypt_chacha20_poly1305(): wolfcrypt_random() failed to generate the key!\n");
-		return 0;
-	}
-
-	if (!wolfcrypt_random(rng, sizeof(iv), iv)) {
-		printf("wolfcrypt_chacha20_poly1305(): wolfcrypt_random() failed to generate the IV!\n");
-		return 0;
-	}
-
-	int ret;
-
-	const double start = seconds();
-
-	for (size_t i = 0; i < iterations; ++i) {
-		ret = wc_ChaCha20Poly1305_Encrypt(key, iv, NULL, 0, src, size, dst, tag);
-		if (ret != 0) {
-			printf("wolfcrypt_chacha20_poly1305(): wc_ChaCha20Poly1305_Encrypt() failed with error %d\n", ret);
-			return 0;
-		}
-
-		ret = wc_ChaCha20Poly1305_Decrypt(key, iv, NULL, 0, dst, size, tag, dst);
-		if (ret != 0) {
-			printf("wolfcrypt_chacha20_poly1305(): wc_ChaCha20Poly1305_Decrypt() failed with error %d\n", ret);
-			return 0;
-		}
-	}
-
-	const double elapsed = seconds() - start;
-
-	validate(size, dst, src);
-
-	return elapsed;
-}
-
-bool wolfcrypt_init(WC_RNG *rng) {
 	int ret = wolfCrypt_Init();
 	if (ret != 0) {
 		printf("wolfcrypt_init(): wolfCrypt_Init() failed with error %d\n", ret);
 		return false;
 	}
 
-	ret = wc_InitRng(rng);
+	WolfCryptParam *wcp = malloc(sizeof(WolfCryptParam));
+
+	ret = wc_InitRng(&wcp->rng);
 	if (ret != 0) {
 		printf("wolfcrypt_init(): wc_InitRng() failed with error %d\n", ret);
+		free(wcp);
 		return false;
 	}
+
+	*param = wcp;
 
 	return true;
 }
 
-bool wolfcrypt_cleanup(WC_RNG *rng) {
+bool wolfcrypt_free(void *param) {
+	if (!param) {
+		return false;
+	}
+
 	bool ok = true;
 
-	int ret = wc_FreeRng(rng);
+	int ret = wc_FreeRng(&((WolfCryptParam *)param)->rng);
 	if (ret != 0) {
 		printf("wolfcrypt_cleanup(): wc_FreeRng() failed with error %d\n", ret);
 		ok = false;
@@ -181,5 +76,128 @@ bool wolfcrypt_cleanup(WC_RNG *rng) {
 		ok = false;
 	}
 
+	free(param);
+
 	return ok;
+}
+
+bool wolfcrypt_random(void *param, const size_t size, void *dst) {
+	if (!param || !dst) {
+		return false;
+	}
+
+	const int ret = wc_RNG_GenerateBlock(&((WolfCryptParam *)param)->rng, dst, size);
+	if (ret != 0) {
+		printf("wolfcrypt_random(): wc_RNG_GenerateBlock() failed with error %d\n", ret);
+		return false;
+	}
+
+	return true;
+}
+
+bool wolfcrypt_set_cipher(void *param, const char *cipher) {
+	if (!param || !cipher) {
+		return false;
+	}
+
+	WolfCryptParam *wcp = param;
+
+	if (cipher == CIPHER_AES_256_GCM) {
+		const int ret = wc_AesGcmSetKey(&wcp->aes, wcp->key, sizeof(wcp->key));
+		if (ret != 0) {
+			printf("wolfcrypt_set_cipher(): wc_AesGcmSetKey() failed with error %d\n", ret);
+			return false;
+		}
+
+		wcp->current_cipher = CIPHER_AES_256_GCM;
+	} else if (cipher == CIPHER_CHACHA20_POLY1305) {
+		wcp->current_cipher = CIPHER_CHACHA20_POLY1305;
+	} else {
+		printf("wolfcrypt_set_cipher(): \"%s\" is not a recognized cipher!\n", cipher);
+		return false;
+	}
+
+	if (!wolfcrypt_random(param, sizeof(wcp->key), wcp->key)) {
+		printf("wolfcrypt_set_cipher(): wolfcrypt_random() failed to generate the key!\n");
+		return false;
+	}
+
+	if (!wolfcrypt_random(param, sizeof(wcp->iv), wcp->iv)) {
+		printf("wolfcrypt_set_cipher(): wolfcrypt_random() failed to generate the IV!\n");
+		return false;
+	}
+
+	return true;
+}
+
+size_t wolfcrypt_buffer_size(size_t size) {
+	return size;
+}
+
+size_t wolfcrypt_encrypt(void *param, const size_t size, void *dst, const void *src) {
+	if (!param || !dst || !src) {
+		return 0;
+	}
+
+	WolfCryptParam *wcp = param;
+
+	if (wcp->current_cipher == CIPHER_AES_256_GCM) {
+		const int ret = wc_AesGcmEncrypt(&wcp->aes, dst, src, size, wcp->iv, sizeof(wcp->iv), wcp->tag, sizeof(wcp->tag), NULL, 0);
+		if (ret != 0) {
+			printf("wolfcrypt_encrypt(): wc_AesGcmEncrypt() failed with error %d\n", ret);
+			return 0;
+		}
+	} else if (wcp->current_cipher == CIPHER_CHACHA20_POLY1305) {
+		const int ret = wc_ChaCha20Poly1305_Encrypt(wcp->key, wcp->iv, NULL, 0, src, size, dst, wcp->tag);
+		if (ret != 0) {
+			printf("wolfcrypt_encrypt(): wc_ChaCha20Poly1305_Encrypt() failed with error %d\n", ret);
+			return 0;
+		}
+	} else {
+		return 0;
+	}
+
+	return size;
+}
+
+size_t wolfcrypt_decrypt(void *param, const size_t size, void *dst, const void *src) {
+	if (!param || !dst || !src) {
+		return 0;
+	}
+
+	WolfCryptParam *wcp = param;
+
+	if (wcp->current_cipher == CIPHER_AES_256_GCM) {
+		const int ret = wc_AesGcmDecrypt(&wcp->aes, dst, src, size, wcp->iv, sizeof(wcp->iv), wcp->tag, sizeof(wcp->tag), NULL, 0);
+		if (ret != 0) {
+			printf("wolfcrypt_decrypt(): wc_AesGcmDecrypt() failed with error %d\n", ret);
+			return 0;
+		}
+	} else if (wcp->current_cipher == CIPHER_CHACHA20_POLY1305) {
+		const int ret = wc_ChaCha20Poly1305_Decrypt(wcp->key, wcp->iv, NULL, 0, src, size, wcp->tag, dst);
+		if (ret != 0) {
+			printf("wolfcrypt_decrypt(): wc_ChaCha20Poly1305_Decrypt() failed with error %d\n", ret);
+			return 0;
+		}
+	} else {
+		return 0;
+	}
+
+	return size;
+}
+
+const Crypto *wolfcrypt_get() {
+	static const Crypto crypto = {
+		wolfcrypt_name,
+		wolfcrypt_ciphers,
+		wolfcrypt_init,
+		wolfcrypt_free,
+		wolfcrypt_random,
+		wolfcrypt_set_cipher,
+		wolfcrypt_buffer_size,
+		wolfcrypt_encrypt,
+		wolfcrypt_decrypt
+	};
+
+	return &crypto;
 }
