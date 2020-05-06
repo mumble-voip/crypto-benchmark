@@ -8,6 +8,10 @@ option(openssl "Build OpenSSL benchmark" ON)
 option(sodium "Build libsodium benchmark" ON)
 option(wolfcrypt "Build wolfCrypt benchmark" ON)
 
+find_package(Threads
+	REQUIRED
+)
+
 if(nss OR sodium OR wolfcrypt)
 	find_package(PkgConfig
 		REQUIRED
@@ -23,6 +27,12 @@ add_executable(crypto_benchmark
 	"utils.c"
 	"utils.h"
 )
+
+target_link_libraries(crypto_benchmark
+	PRIVATE
+		Threads::Threads
+)
+
 
 if(hydrogen)
 	add_subdirectory(libhydrogen)
