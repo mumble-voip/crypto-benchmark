@@ -12,8 +12,17 @@ compiler:
 os:
   - linux
 
+before_install:
+  - git clone -n https://github.com/jedisct1/libsodium.git
+  - cd libsodium && git checkout 88c568a03522cda6c54fd4b5c76cfbbc52a744f4 && cd ..
+
 install:
-  - sudo apt-get install libnss3-dev libsodium-dev libssl-dev libwolfssl-dev
+  - sudo apt-get install libtool libnss3-dev libssl-dev libwolfssl-dev
+  - cd libsodium &&
+    ./autogen.sh && ./configure --enable-opt &&
+    make -j $(nproc) && make check &&
+    sudo make install && sudo ldconfig &&
+    cd ..
 
 script:
   - cat /proc/cpuinfo
