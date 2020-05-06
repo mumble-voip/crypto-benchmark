@@ -25,6 +25,16 @@ typedef struct Crypto {
 	size_t (*decrypt)(void *param, const size_t size, void *dst, const void *src);
 } Crypto;
 
+typedef struct Progress {
+	double elapsed_time;
+	size_t iterations_completed;
+	size_t iterations_total;
+	const char *lib_name;
+	double start_time;
+} Progress;
+
+void *progress_function(void *arg);
+
 double seconds();
 
 bool validate(const size_t size, const void *buf_1, const void *buf_2);

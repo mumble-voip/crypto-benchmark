@@ -7,6 +7,7 @@
 #include "sodium.h"
 #include "wolfcrypt.h"
 
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,9 +42,17 @@ bool benchmark(const Crypto *crypto, const size_t message_size, const size_t ite
 			continue;
 		}
 
+		pthread_t progress_thread;
+		Progress progress;
+		progress.iterations_total = iterations;
+		progress.lib_name = name;
+
 		printf("[%s] running %s benchmark...\n", name, cipher);
 
+		pthread_create(&progress_thread, NULL, progress_function, &progress);
+
 		const double start = seconds();
+		progress.start_time = start;
 
 		for (size_t i = 0; i < iterations; ++i) {
 			size_t ret = crypto->encrypt(param, message_size, dst, src);
@@ -59,9 +68,13 @@ bool benchmark(const Crypto *crypto, const size_t message_size, const size_t ite
 				ok = false;
 				break;
 			}
+
+			progress.iterations_completed = i;
 		}
 
 		const double elapsed = seconds() - start;
+
+		pthread_join(progress_thread, NULL);
 
 		if (!validate(message_size, dst, src)) {
 			printf("[%s] decrypted message doesn't match original, encryption/decryption failure!\n", name);
