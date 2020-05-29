@@ -16,6 +16,7 @@ const char *sodium_name() {
 
 const char **sodium_ciphers() {
 	static const char *names[] = {
+		CIPHER_AEGIS_128L,
 		CIPHER_AEGIS_256,
 		CIPHER_AES_256_GCM,
 		CIPHER_CHACHA20_POLY1305,
@@ -67,7 +68,10 @@ bool sodium_set_cipher(void *param, const char *cipher) {
 
 	SodiumParam *sp = param;
 
-	if (cipher == CIPHER_AEGIS_256) {
+	if (cipher == CIPHER_AEGIS_128L) {
+		sp->current_cipher = CIPHER_AEGIS_128L;
+		crypto_aead_aegis128l_keygen(sp->key);
+	} else if (cipher == CIPHER_AEGIS_256) {
 		sp->current_cipher = CIPHER_AEGIS_256;
 		crypto_aead_aegis256_keygen(sp->key);
 	} else if (cipher == CIPHER_AES_256_GCM) {
@@ -103,7 +107,12 @@ size_t sodium_encrypt(void *param, const size_t size, void *dst, const void *src
 
 	SodiumParam *sp = param;
 
-	if (sp->current_cipher == CIPHER_AEGIS_256) {
+	if (sp->current_cipher == CIPHER_AEGIS_128L) {
+		if (crypto_aead_aegis128l_encrypt_detached(dst, sp->tag, NULL, src, size, NULL, 0, NULL, sp->iv, sp->key) != 0) {
+			printf("sodium_encrypt(): crypto_aead_aegis128l_encrypt_detached() failed!\n");
+			return 0;
+		}
+	} else if (sp->current_cipher == CIPHER_AEGIS_256) {
 		if (crypto_aead_aegis256_encrypt_detached(dst, sp->tag, NULL, src, size, NULL, 0, NULL, sp->iv, sp->key) != 0) {
 			printf("sodium_encrypt(): crypto_aead_aegis256_encrypt_detached() failed!\n");
 			return 0;
@@ -132,7 +141,12 @@ size_t sodium_decrypt(void *param, const size_t size, void *dst, const void *src
 
 	SodiumParam *sp = param;
 
-	if (sp->current_cipher == CIPHER_AEGIS_256) {
+	if (sp->current_cipher == CIPHER_AEGIS_128L) {
+		if (crypto_aead_aegis128l_decrypt_detached(dst, NULL, dst, size, sp->tag, NULL, 0, sp->iv, sp->key) != 0) {
+			printf("sodium_decrypt(): crypto_aead_aegis128l_decrypt_detached() failed!\n");
+			return 0;
+		}
+	} else if (sp->current_cipher == CIPHER_AEGIS_256) {
 		if (crypto_aead_aegis256_decrypt_detached(dst, NULL, dst, size, sp->tag, NULL, 0, sp->iv, sp->key) != 0) {
 			printf("sodium_decrypt(): crypto_aead_aegis256_decrypt_detached() failed!\n");
 			return 0;
