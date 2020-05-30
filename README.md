@@ -40,5 +40,19 @@ The benchmark is written in C language.
 ### Crypto libraries
 [NSS](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS), [OpenSSL](https://www.openssl.org/), [libsodium](https://doc.libsodium.org/) (custom build from the master branch, due to AEGIS availability), [wolfCrypt](https://www.wolfssl.com/products/wolfcrypt-2/)
 
+| Algorithm | Library | License | Limitations |
+| --------- | ------- | ------- | ----------- |
+| AES-256-GCM | NSS | MPL 2 |  |
+| ChaCha20-Poly1305 | NSS | MPL 2|  |
+| AES-128-OCB | OpenSSL | Apache | Patented |
+| AES-256-GCM | OpenSSL | Apache |  |
+| ChaCha20-Poly1305 | OpenSSL | Apache |  |
+| AEGIS-128L | libsodium | ISC |  |
+| AEGIS-256 | libsodium | ISC |  |
+| AES-256-GCM | libsodium | ISC | [Requires SSSE3 + `aesni` and `pclmul` instructions](https://doc.libsodium.org/secret-key_cryptography/aead/aes-256-gcm#limitations) |
+| ChaCha20-Poly1305 | libsodium | ISC |  |
+| AES-256-GCM | wolfCrypt | GPLv2 | [Optimizations disabled by default](https://github.com/wolfSSL/wolfssl/issues/2691#issuecomment-567711659) |
+| ChaCha20-Poly1305 | wolfCrypt | GPLv2 | [Optimizations disabled by default](https://github.com/wolfSSL/wolfssl/issues/2691#issuecomment-567711659) |
+
 ## Contribute
 If you are willing to help in development of this tool, feel free to create a new issue, pull request, or start a discussion on [#mumble-dev on Freenode](irc://chat.freenode.net/mumble-dev).
