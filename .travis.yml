@@ -14,7 +14,7 @@ os:
 
 before_install:
   - git clone -n https://github.com/jedisct1/libsodium.git
-  - cd libsodium && git checkout 8360706c21a2ad9f2aff233ebb9d297279be08a6 && cd ..
+  - cd libsodium && git checkout 3c49e89c19d06d9967180dda887fb15ae2e0fa40 && cd ..
 
 install:
   - sudo apt-get install libtool libnss3-dev libssl-dev libwolfssl-dev
